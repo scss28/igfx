@@ -1,5 +1,5 @@
 #include "igfx/linalg.h"
 
-namespace igfx {
-    v2f32 windowSize();
+namespace igfx::window {
+    vec2 size();
 }

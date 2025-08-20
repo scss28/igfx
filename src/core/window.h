@@ -1,7 +1,6 @@
-namespace igfx::core::window {
-    void init();
-    void deinit();
-    bool shouldClose();
+#pragma once
 
-    v2f32 size();
+namespace igfx::core::window {
+    vec2 size();
+    bool shouldClose();
 }

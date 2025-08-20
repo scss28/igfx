@@ -1,34 +1,24 @@
+#include "core/engine.h"
 #include "core/window.h"
+
 #include <GLFW/glfw3.h>
 
 namespace igfx::core::window {
-    struct {
-        GLFWwindow* ptr;
-        v2f32 size;
-    } window;
-
-    void init() {
-        if (!glfwInit()) fatal("failed to initialize glfw");
-
-        window.ptr = glfwCreateWindow(640, 480, "", nullptr, nullptr);
-        if (window.ptr == nullptr) {
-            deinit();
-            fatal("failed to create a window");
-        }
-    }
-
-    void deinit() {
-        glfwTerminate();
-    }
-
     bool shouldClose() {
-        glfwSwapBuffers(window.ptr);
+        glfwSwapBuffers(g_Engine.window.ptr);
         glfwPollEvents();
 
-        return glfwWindowShouldClose(window.ptr);
+        i32 windowWidth, windowHeight;
+        glfwGetWindowSize(g_Engine.window.ptr, &windowWidth, &windowHeight);
+        g_Engine.window.size = {
+            static_cast<f32>(windowWidth), 
+            static_cast<f32>(windowHeight),
+        };
+
+        return glfwWindowShouldClose(g_Engine.window.ptr);
     }
 
-    v2f32 size() {
-        return window.size;
+    vec2 size() {
+        return g_Engine.window.size;
     }
 }

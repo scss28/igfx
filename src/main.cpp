@@ -1,7 +1,7 @@
 #include "igfx/graphics.h"
 
+#include "core/core.h"
 #include "core/window.h"
-#include "core/graphics.h"
 
 #include <print>
 
@@ -65,10 +65,8 @@ extern void draw(igfx::Frame*);
 #endif
 
 int main() {
-    igfx::core::window::init();
-    defer { igfx::core::window::deinit(); };
-
-    igfx::core::graphics::init();
+    igfx::core::init();
+    defer { igfx::core::deinit(); };
 
 #ifdef USER_DLL
     userCode.reload();

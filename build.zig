@@ -28,6 +28,8 @@ pub fn addExecutable(
         .files = &.{
             "src/core/window.cpp",
             "src/core/graphics.cpp",
+            "src/core/core.cpp",
+            "src/core/engine.cpp",
         },
         .flags = base_cpp_flags ++ .{
             "-include",
@@ -59,6 +61,7 @@ pub fn addExecutable(
     igfx_lib_mod.addCSourceFiles(.{
         .files = &.{
             "src/window.cpp",
+            "src/graphics.cpp",
             "src/pch.cpp",
             "src/linalg.cpp",
         },

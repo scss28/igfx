@@ -1,6 +1,7 @@
 #include "igfx/nums.h"
 #include "igfx/linalg.h"
-#include <print>
+
+#include "log.h"
 
 // SPDX-FileCopyrightText: 2015 Marek Rusinowski
 // SPDX-License-Identifier: MIT
@@ -40,10 +41,3 @@ extern Deferrer deferrer;
 #define TOKENPASTE2(x, y) TOKENPASTE(x, y)
 #define defer \
     auto TOKENPASTE2(__deferred_lambda_call, __COUNTER__) = deferrer << [&]
-
-template <class... Args>
-_Noreturn void fatal(std::format_string<Args&...> fmt, Args&&... args) {
-    std::println(fmt, args...);
-    exit(1);
-}
-
