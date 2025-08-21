@@ -61,7 +61,7 @@ namespace igfx::core {
 #endif
     
         u32 vkExtensionCount;
-        vkEnumerateInstanceExtensionProperties(nullptr, &requiredExtensionCount, nullptr);
+        vkEnumerateInstanceExtensionProperties(nullptr, &vkExtensionCount, nullptr);
     
         auto vkExtensions = new VkExtensionProperties[vkExtensionCount];
         defer { delete[] vkExtensions; };
@@ -230,7 +230,7 @@ namespace igfx::core {
             "vkCreateDebugReportCallbackEXT"
         );
     
-        VkDebugReportCallbackEXT debugCallback;
+        VkDebugReportCallbackEXT debugCallback = nullptr;
     	if (CreateDebugReportCallback(
             instance, 
             &debugCreateInfo, 
@@ -306,7 +306,9 @@ namespace igfx::core {
             .presentQueue = presentQueue,
             .graphicsQueue = graphicsQueue,
             .surface = surface,
+#ifdef _DEBUG
             .debugCallback = debugCallback,
+#endif
         };
     }
 
@@ -317,6 +319,14 @@ namespace igfx::core {
 
     void deinit() {
         glfwDestroyWindow(g_Engine.window.ptr);
+
+#ifdef _DEBUG
+        vkDestroyDebugReportCallbackEXT(
+            g_Engine.graphics.instance, 
+            g_Engine.graphics.debugCallback, 
+            nullptr
+        );
+#endif
 
         vkDestroySurfaceKHR(g_Engine.graphics.instance, g_Engine.graphics.surface, nullptr);
         vkDestroyDevice(g_Engine.graphics.device, nullptr);

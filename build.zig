@@ -4,13 +4,13 @@ const io = std.io;
 const process = std.process;
 const unicode = std.unicode;
 
+const base_cpp_flags: []const []const u8 = &.{ "-std=c++23", "-Wall" };
+var igfx_core_lib: *std.Build.Step.Compile = undefined;
+
 pub const AddExecutableOptions = struct {
     name: []const u8,
     module: *std.Build.Module,
 };
-
-const base_cpp_flags: []const []const u8 = &.{ "-std=c++23", "-Wall" };
-var igfx_core_lib: *std.Build.Step.Compile = undefined;
 
 pub fn addExecutable(
     b: *std.Build,
@@ -62,22 +62,15 @@ pub fn addExecutable(
 
     switch (target.result.os.tag) {
         .windows => {
-            igfx_core_mod.linkSystemLibrary("vulkan-1", .{
-                .use_pkg_config = .no,
-                .preferred_link_mode = .static,
-            });
+            igfx_core_mod.linkSystemLibrary("vulkan-1", .{});
         },
         else => {
-            igfx_core_mod.linkSystemLibrary("vulkan", .{
-                .use_pkg_config = .no,
-                .preferred_link_mode = .static,
-            });
+            igfx_core_mod.linkSystemLibrary("vulkan", .{});
         }
     }
 
-    const glfw = b.dependency("glfw", .{});
-    igfx_core_mod.addIncludePath(glfw.path("glfw/include"));
-    igfx_core_mod.linkLibrary(glfw.artifact("glfw"));
+    const glfw = b.dependency("glfw", .{ .target = target, .optimize = optimize });
+    igfx_core_mod.linkLibrary(glfw.artifact("glfw3"));
 
     igfx_core_lib = b.addLibrary(.{
         .name = "igfx_core",
