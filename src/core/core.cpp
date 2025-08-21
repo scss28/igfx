@@ -4,11 +4,10 @@
 #include "core/core.h"
 #include "core/engine.h"
 
-#include <stdio.h>
-
 namespace igfx::core {
     inline Engine::Window initWindow() {
         if (!glfwInit()) log::fatal("failed to initialize glfw");
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         GLFWwindow* windowPtr = glfwCreateWindow(640, 480, "", nullptr, nullptr);
         if (windowPtr == nullptr) {
