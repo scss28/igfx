@@ -14,7 +14,7 @@ namespace igfx::core {
             VkQueue graphicsQueue;
             VkSurfaceKHR surface;
 
-#ifdef _DEBUG
+#ifdef DEBUG
             VkDebugReportCallbackEXT debugCallback;
 #endif
         } graphics;

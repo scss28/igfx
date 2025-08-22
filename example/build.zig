@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const igfx = @import("igfx");
-    const exe = igfx.addExecutable(b.dependency("igfx", .{}).builder, .{
+    const exe = igfx.addExecutable(b, .{
         .name = "igfx-example",
         .module = exe_mod,
     });

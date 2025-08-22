@@ -59,9 +59,9 @@ struct {
 } userCode;
 
 #else
-extern void init();
-extern void update();
-extern void draw(igfx::Frame*);
+extern "C" void init();
+extern "C" void update();
+extern "C" void draw(igfx::Frame*);
 #endif
 
 int main() {

@@ -48,10 +48,10 @@ fn addCdbFlags(gpa: mem.Allocator, flags: []const []const u8) []const []const u8
 fn installCompileCommands(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
     const b = step.owner;
 
-    var combined: std.ArrayListUnmanaged(u8) = .empty;
+    var combined: std.ArrayList(u8) = .empty;
     try combined.append(b.allocator, '[');
 
-    var cdb_dir = try fs.openDirAbsolute(cdb_path, .{
+    var cdb_dir = try b.build_root.handle.openDir(cdb_path, .{
         .iterate = true,
     });
     defer cdb_dir.close();

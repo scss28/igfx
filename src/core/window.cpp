@@ -17,8 +17,4 @@ namespace igfx::core::window {
 
         return glfwWindowShouldClose(g_Engine.window.ptr);
     }
-
-    vec2 size() {
-        return g_Engine.window.size;
-    }
 }

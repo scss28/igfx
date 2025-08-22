@@ -21,7 +21,7 @@ namespace igfx::core {
         };
     }
 
-#ifdef _DEBUG
+#ifdef DEBUG
     VkBool32 vkDebugCallback(
         VkDebugReportFlagsEXT flags, 
         VkDebugReportObjectTypeEXT objType, 
@@ -33,9 +33,9 @@ namespace igfx::core {
         void* pUserData
     ) {
     	if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-            log::err("vkError [{}] Code {}: {}", pLayerPrefix, msgCode, pMsg);
+            log::err("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
     	} else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-            log::warn("vkWarn [{}] Code {}: {}", pLayerPrefix, msgCode, pMsg);
+            log::warn("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
     	}
     
     	return VK_FALSE;
@@ -47,16 +47,15 @@ namespace igfx::core {
         u8 const** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     
         u32 requiredExtensionCount = glfwExtensionCount;
-#ifdef _DEBUG
+#ifdef DEBUG
         requiredExtensionCount += 1;
 #endif
-    
         u8 const** requiredExtensions = new u8 const*[requiredExtensionCount];
         defer { delete[] requiredExtensions; };
     
-        memcpy(requiredExtensions, glfwExtensions, glfwExtensionCount);
+        memcpy(requiredExtensions, glfwExtensions, glfwExtensionCount * sizeof(u8 const*));
     
-#ifdef _DEBUG
+#ifdef DEBUG
         requiredExtensions[requiredExtensionCount - 1] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
 #endif
     
@@ -68,28 +67,58 @@ namespace igfx::core {
     
         vkEnumerateInstanceExtensionProperties(
             nullptr, 
-            &requiredExtensionCount, 
+            &vkExtensionCount, 
             vkExtensions
         );
+
+        for (u32 i = 0; i < requiredExtensionCount; i++) {
+            u32 j = 0;
+            for (; j < vkExtensionCount; j++) {
+                if (strcmp(requiredExtensions[i], vkExtensions[j].extensionName)) break;
+            }
+
+            if (j == vkExtensionCount) {
+                log::err("{} (not found)", requiredExtensions[i]);
+            } else {
+                log::debug("{} (enabled)", requiredExtensions[i]);
+            }
+        }
+
+        VkApplicationInfo applicationInfo {
+		    .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		    .pApplicationName = "igfx app",
+		    .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+		    .pEngineName = "igfx",
+		    .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+		    .apiVersion = VK_API_VERSION_1_0,
+        };
     
         VkInstanceCreateInfo instanceCreateInfo {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pNext = nullptr,
+            .pApplicationInfo = &applicationInfo,
+            .enabledLayerCount = 0,
+            .ppEnabledLayerNames = nullptr,
             .enabledExtensionCount = requiredExtensionCount,
             .ppEnabledExtensionNames = requiredExtensions,
         };
-    
-#ifdef _DEBUG
+
+#ifdef DEBUG
         instanceCreateInfo.enabledLayerCount = enableLayerCount;
         instanceCreateInfo.ppEnabledLayerNames = &ppEnabledLayerNames;
 #endif
-    
+
         VkInstance instance;
-        if (vkCreateInstance(
+        VkResult result = vkCreateInstance(
             &instanceCreateInfo, 
             nullptr, 
             &instance
-        ) != VK_SUCCESS) log::fatal("failed to create a VkInstance");
+        );
+        if (result != VK_SUCCESS) {
+            log::fatal("failed to create a VkInstance (errno: {})", (i32)result);
+        }
 
+        log::debug("VkInstance created");
         return instance;
     }
 
@@ -208,8 +237,8 @@ namespace igfx::core {
     }
 
     inline Engine::Graphics initGraphics(GLFWwindow* window) {
-#ifdef _DEBUG
-        const u8* ppEnabledLayerNames = "VK_LAYER_LUNARG_standard_validation";
+#ifdef DEBUG
+        const u8* ppEnabledLayerNames = "VK_LAYER_KHRONOS_validation";
         u32 enableLayerCount = 1;
 #else
         const u8* ppEnabledLayerNames = nullptr;
@@ -217,21 +246,21 @@ namespace igfx::core {
 #endif
         VkInstance instance = createVkInstance(ppEnabledLayerNames, enableLayerCount);
     
-#ifdef _DEBUG
+#ifdef DEBUG
         VkDebugReportCallbackCreateInfoEXT debugCreateInfo {
     	    .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
     	    .flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT,
     	    .pfnCallback = (PFN_vkDebugReportCallbackEXT) vkDebugCallback,
         };
     
-    	PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = 
+    	PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallback = 
             (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
             instance, 
             "vkCreateDebugReportCallbackEXT"
         );
     
-        VkDebugReportCallbackEXT debugCallback = nullptr;
-    	if (CreateDebugReportCallback(
+        VkDebugReportCallbackEXT debugCallback;
+    	if (vkCreateDebugReportCallback(
             instance, 
             &debugCreateInfo, 
             nullptr, 
@@ -278,7 +307,7 @@ namespace igfx::core {
         VkPhysicalDeviceFeatures deviceFeatures {};
         VkDeviceCreateInfo deviceCreateInfo {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .queueCreateInfoCount = 1,
+            .queueCreateInfoCount = 2,
             .pQueueCreateInfos = queueCreateInfos,
             .enabledLayerCount = enableLayerCount,
             .ppEnabledLayerNames = &ppEnabledLayerNames,
@@ -306,7 +335,7 @@ namespace igfx::core {
             .presentQueue = presentQueue,
             .graphicsQueue = graphicsQueue,
             .surface = surface,
-#ifdef _DEBUG
+#ifdef DEBUG
             .debugCallback = debugCallback,
 #endif
         };
@@ -320,8 +349,14 @@ namespace igfx::core {
     void deinit() {
         glfwDestroyWindow(g_Engine.window.ptr);
 
-#ifdef _DEBUG
-        vkDestroyDebugReportCallbackEXT(
+#ifdef DEBUG
+    	PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugCallback = 
+            (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+            g_Engine.graphics.instance, 
+            "vkDestroyDebugReportCallbackEXT"
+        );
+
+        vkDestroyDebugCallback(
             g_Engine.graphics.instance, 
             g_Engine.graphics.debugCallback, 
             nullptr
