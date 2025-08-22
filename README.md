@@ -29,6 +29,7 @@ Of course these functions could be split into separate files for organization as
 To build the example you first need:
 - [Zig](https://ziglang.org/download/) (0.15.1)
 - [VulkanSDK](https://www.lunarg.com/vulkan-sdk/)
+
 Once you have the dependencies installed, run:
 
 - `zig build` to build
@@ -39,7 +40,7 @@ Once you have the dependencies installed, run:
 First check if you have the prerequisites mentioned in **Building the example**.
 
 Then create a new directory and make a new `build.zig` file and paste in the code below:
-```
+```Rust
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
