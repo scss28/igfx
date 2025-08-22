@@ -14,7 +14,4 @@ namespace igfx {
         u32 index;
         void DrawSprite(Sprite, DrawSpriteOptions);
     };
-
-    Frame frame();
-
 }

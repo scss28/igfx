@@ -7,14 +7,10 @@ extern "C" void init() {
 
 }
 
-extern "C" void update() {
+extern "C" void update(f32 deltaTime) {
 
 }
 
-extern "C" void draw(igfx::Frame frame) {
-    frame.DrawSprite({}, {
-        .scale = vec2::one * 20.0f,
-    });
-
+extern "C" void draw(igfx::Frame* frame) {
     igfx::window::size();
 }

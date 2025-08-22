@@ -1,7 +1,4 @@
-#pragma once
-
-namespace igfx::core {
+namespace igfx::engine {
     void init();
     void deinit();
 }
-

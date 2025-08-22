@@ -1,8 +1,5 @@
 #include "igfx/window.h"
-#include "core/engine.h"
+#include "core/window.h"
 
 namespace igfx::window {
-    vec2 size() {
-        return core::g_Engine.window.size;
-    }
 }

@@ -1,7 +1,6 @@
+#include "engine.h"
+#include "window.h"
 #include "igfx/graphics.h"
-
-#include "core/core.h"
-#include "core/window.h"
 
 #include <print>
 
@@ -21,14 +20,15 @@ using DLLHandle = void*;
 
 #ifdef USER_DLL
 using InitFn = void(*)();
-using UpdateFn = void(*)();
+using UpdateFn = void(*)(f32);
 using DrawFn = void(*)(igfx::Frame*);
 struct {
     DLLHandle handle = nullptr;
-
-    InitFn init;
-    UpdateFn update;
-    DrawFn draw;
+    struct {
+        InitFn init;
+        UpdateFn update;
+        DrawFn draw;
+    } fns;
 
     void reload() {
         if (handle != nullptr) {
@@ -41,9 +41,9 @@ struct {
             exit(1);
         }
 
-        init = loadFn<InitFn>("init");
-        update = loadFn<UpdateFn>("update");
-        draw = loadFn<DrawFn>("draw");
+        fns.init = loadFn<InitFn>("init");
+        fns.update = loadFn<UpdateFn>("update");
+        fns.draw = loadFn<DrawFn>("draw");
     }
 
     template<typename Fn>
@@ -56,41 +56,42 @@ struct {
 
         return fn; 
     }
-} userCode;
+} user;
 
 #else
 extern "C" void init();
-extern "C" void update();
+extern "C" void update(f32);
 extern "C" void draw(igfx::Frame*);
 #endif
 
 int main() {
-    igfx::core::init();
-    defer { igfx::core::deinit(); };
+    igfx::engine::init();
+    defer { igfx::engine::deinit(); };
 
 #ifdef USER_DLL
-    userCode.reload();
-    userCode.init();
+    user.reload();
+    user.fns.init();
 #else
     init();
 #endif
 
-    while (!igfx::core::window::shouldClose()) {
+    while (!igfx::window::shouldClose()) {
+        f32 deltaTime = 1.0f;
 #ifdef USER_DLL
-        userCode.update();
+        user.fns.update(deltaTime);
 #else
-        update();
+        update(deltaTime);
 #endif
 
         igfx::Frame frame;
 #ifdef USER_DLL
-        userCode.draw(&frame);
+        user.fns.draw(&frame);
 #else
         draw(&frame);
 #endif
     }
 
 #ifdef USER_DLL
-    CLOSE_DLL(userCode.handle);
+    CLOSE_DLL(user.handle);
 #endif
 }

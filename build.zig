@@ -1,4 +1,5 @@
 const std = @import("std");
+const mem = std.mem;
 const fs = std.fs;
 const io = std.io;
 const process = std.process;
@@ -65,6 +66,43 @@ fn addExecutableSelf(
     return exe;
 }
 
+fn embedShaderCode(
+    b: *std.Build,
+    vulkan_sdk_path: []const u8,
+    mod: *std.Build.Module,
+    src: std.Build.LazyPath,
+    name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    const compiler_path = b.pathJoin(&.{
+        vulkan_sdk_path,
+        "Bin",
+        if (target.result.os.tag == .windows) "glslc.exe" else "glslc",
+    });
+
+    const compile = b.addSystemCommand(&.{compiler_path});
+    compile.addArgs(&.{
+        "--target-env=vulkan1.3",
+    });
+    switch (optimize) {
+        .ReleaseFast => compile.addArgs(&.{"-O"}),
+        else => {},
+    }
+
+    compile.addFileArg(src);
+
+    switch (target.result.os.tag) {
+        .windows => {
+            const file = compile.addPrefixedOutputFileArg("-o", b.fmt("{s}.rc", .{name}));
+            mod.addWin32ResourceFile(.{ .file = file });
+        },
+        else => {
+            @panic("TODO");
+        },
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -79,9 +117,8 @@ pub fn build(b: *std.Build) void {
         .files = &.{
             "src/core/window.cpp",
             "src/core/graphics.cpp",
-            "src/core/core.cpp",
-            "src/core/engine.cpp",
 
+            "src/engine.cpp",
             "src/window.cpp",
             "src/graphics.cpp",
             "src/pch.cpp",
@@ -114,6 +151,16 @@ pub fn build(b: *std.Build) void {
     igfx_lib_mod.addIncludePath(.{
         .cwd_relative = b.pathJoin(&.{ vulkan_sdk_path, "Include" }),
     });
+
+    // embedShaderCode(
+    //     b,
+    //     vulkan_sdk_path,
+    //     igfx_lib_mod,
+    //     b.path("shaders/quad.frag"),
+    //     "quad.frag",
+    //     target,
+    //     optimize,
+    // );
 
     const glfw = b.dependency("glfw", .{ .target = target, .optimize = optimize });
     igfx_lib_mod.linkLibrary(glfw.artifact("glfw3"));
