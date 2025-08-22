@@ -9,17 +9,17 @@ The usual boilerplate for an igfx application looks something like this:
 using igfx::vec2;
 
 // Load assets, initialize application state etc.
-extern void init() {
+extern "C" void init() {
     /// ...
 }
 
 // Update application state.
-extern void update(f32 deltaTime) {
+extern "C" void update(f32 deltaTime) {
     /// ...
 }
 
 // Draw the application.
-extern void draw(igfx::Frame* frame) {
+extern "C" void draw(igfx::Frame* frame) {
     /// ...
 }
 ```
