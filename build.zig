@@ -5,66 +5,23 @@ const io = std.io;
 const process = std.process;
 const unicode = std.unicode;
 
-const base_cpp_flags: []const []const u8 = &.{ "-std=c++23", "-Wall" };
+const cpp_flags: []const []const u8 = &.{
+    "-std=c++23",
+    "-Wall",
+    "-Werror",
+    "-Wextra",
+    "-pedantic",
+    "-fno-exceptions",
+    "-fno-rtti",
+
+    "-include",
+    "src/pch.h",
+};
 
 pub const AddExecutableOptions = struct {
     name: []const u8,
     module: *std.Build.Module,
 };
-
-pub fn addExecutable(b: *std.Build, options: AddExecutableOptions) *std.Build.Step.Compile {
-    const user_mod = options.module;
-    const target = user_mod.resolved_target.?;
-    const optimize = user_mod.optimize.?;
-
-    const igfx = b.dependency("igfx", .{ .target = target, .optimize = optimize });
-    const igfx_lib = igfx.artifact("igfx");
-    const igfx_wrapper_mod = igfx.module("igfx_wrapper");
-
-    return addExecutableSelf(b, options.name, user_mod, igfx_lib, igfx_wrapper_mod);
-}
-
-fn addExecutableSelf(
-    b: *std.Build,
-    name: []const u8,
-    user_mod: *std.Build.Module,
-    igfx_lib: *std.Build.Step.Compile,
-    igfx_wrapper_mod: *std.Build.Module,
-) *std.Build.Step.Compile {
-    const optimize = user_mod.optimize.?;
-
-    user_mod.addIncludePath(b.path("include"));
-    user_mod.linkLibrary(igfx_lib);
-
-    const user_lib = b.addLibrary(.{
-        .name = "user",
-        .root_module = user_mod,
-        .linkage = if (optimize == .Debug) .dynamic else .static,
-    });
-
-    const exe = b.addExecutable(.{
-        .name = name,
-        .root_module = igfx_wrapper_mod,
-    });
-
-    // Depending on the optimize mode either link statically or
-    // provide a path to the dll enabling hot reload during debugging (TODO).
-    if (optimize == .Debug) {
-        const user_install = b.addInstallArtifact(user_lib, .{});
-        const user_install_path = b.pathJoin(&.{
-            b.install_path,
-            "bin",
-            user_install.dest_sub_path,
-        });
-
-        igfx_wrapper_mod.addCMacro("USER_DLL", b.fmt("R\"({s})\"", .{user_install_path}));
-        exe.step.dependOn(&user_install.step);
-    } else {
-        igfx_wrapper_mod.linkLibrary(user_lib);
-    }
-
-    return exe;
-}
 
 fn embedShaderCode(
     b: *std.Build,
@@ -92,28 +49,32 @@ fn embedShaderCode(
 
     compile.addFileArg(src);
 
-    switch (target.result.os.tag) {
-        .windows => {
-            const file = compile.addPrefixedOutputFileArg("-o", b.fmt("{s}.rc", .{name}));
-            mod.addWin32ResourceFile(.{ .file = file });
-        },
-        else => {
-            @panic("TODO");
-        },
-    }
+    const path = b.pathJoin("shaders/{s}", .{name});
+    _ = b.addInstallFile(
+        compile.addOutputFileArg(b.fmt("{s}.spv", .{name})),
+        path,
+    );
+
+    _ = mod;
 }
 
 pub fn build(b: *std.Build) void {
+    defer _ = @import("cdb").addStep(b, "cdb");
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const igfx_lib_mod = b.addModule("igfx", .{
+    const libcx = b.dependency("libcx", .{
         .target = target,
         .optimize = optimize,
-        .link_libcpp = true,
+    }).artifact("libcx");
+
+    const lib_mod = b.addModule("igfx", .{
+        .target = target,
+        .optimize = optimize,
     });
 
-    igfx_lib_mod.addCSourceFiles(.{
+    lib_mod.addCSourceFiles(.{
         .files = &.{
             "src/core/window.cpp",
             "src/core/graphics.cpp",
@@ -121,21 +82,18 @@ pub fn build(b: *std.Build) void {
             "src/engine.cpp",
             "src/window.cpp",
             "src/graphics.cpp",
-            "src/pch.cpp",
             "src/linalg.cpp",
         },
-        .flags = base_cpp_flags ++ .{
-            "-include",
-            "src/pch.h",
-        },
+        .flags = cpp_flags,
     });
 
     if (optimize == .Debug) {
-        igfx_lib_mod.addCMacro("DEBUG", "");
+        lib_mod.addCMacro("DEBUG", "");
     }
 
-    igfx_lib_mod.addIncludePath(b.path("include"));
-    igfx_lib_mod.addIncludePath(b.path("src"));
+    lib_mod.addIncludePath(b.path("include"));
+    lib_mod.addIncludePath(b.path("src"));
+    lib_mod.linkLibrary(libcx);
 
     const vulkan_sdk_path = b.option(
         []const u8,
@@ -148,7 +106,7 @@ pub fn build(b: *std.Build) void {
         };
     };
 
-    igfx_lib_mod.addIncludePath(.{
+    lib_mod.addIncludePath(.{
         .cwd_relative = b.pathJoin(&.{ vulkan_sdk_path, "Include" }),
     });
 
@@ -163,73 +121,89 @@ pub fn build(b: *std.Build) void {
     // );
 
     const glfw = b.dependency("glfw", .{ .target = target, .optimize = optimize });
-    igfx_lib_mod.linkLibrary(glfw.artifact("glfw3"));
+    lib_mod.linkLibrary(glfw.artifact("glfw3"));
 
-    const igfx_lib = b.addLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "igfx",
-        .root_module = igfx_lib_mod,
+        .root_module = lib_mod,
     });
 
-    b.installArtifact(igfx_lib);
+    b.installArtifact(lib);
 
-    const igfx_wrapper_mod = b.addModule("igfx_wrapper", .{
+    const wrapper_mod = b.addModule("igfx_wrapper", .{
         .target = target,
         .optimize = optimize,
-        .link_libcpp = true,
     });
 
-    igfx_wrapper_mod.addCSourceFiles(.{
+    wrapper_mod.addCSourceFiles(.{
         .files = &.{"src/main.cpp"},
-        .flags = base_cpp_flags ++ .{
-            "-include",
-            "src/pch.h",
-        },
+        .flags = cpp_flags,
     });
 
-    igfx_wrapper_mod.addIncludePath(b.path("include"));
-    igfx_wrapper_mod.addIncludePath(b.path("src"));
-    igfx_wrapper_mod.linkLibrary(igfx_lib);
+    wrapper_mod.addIncludePath(b.path("include"));
+    wrapper_mod.addIncludePath(b.path("src"));
+    wrapper_mod.linkLibrary(lib);
+    wrapper_mod.linkLibrary(libcx);
 
-    igfx_wrapper_mod.addLibraryPath(.{
+    wrapper_mod.addLibraryPath(.{
         .cwd_relative = b.pathJoin(&.{ vulkan_sdk_path, "Lib" }),
     });
 
     switch (target.result.os.tag) {
         .windows => {
-            igfx_wrapper_mod.linkSystemLibrary("vulkan-1", .{});
+            wrapper_mod.linkSystemLibrary("vulkan-1", .{});
         },
         else => {
-            igfx_wrapper_mod.linkSystemLibrary("vulkan", .{});
+            wrapper_mod.linkSystemLibrary("vulkan", .{});
         }
     }
 
-    const example_exe_mod = b.createModule(.{
+    const user_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
     });
 
-    example_exe_mod.addCSourceFile(.{
+    user_mod.addCSourceFile(.{
         .file = b.path("example/src/main.cpp"),
         .flags = &.{"-std=c++23"},
     });
 
-    const example_exe = addExecutableSelf(
-        b,
-        "example",
-        example_exe_mod,
-        igfx_lib,
-        igfx_wrapper_mod,
-    );
+    user_mod.addIncludePath(b.path("include"));
+    user_mod.linkLibrary(lib);
+    user_mod.linkLibrary(libcx);
 
-    b.installArtifact(example_exe);
+    const user_lib = b.addLibrary(.{
+        .name = "user",
+        .root_module = user_mod,
+        .linkage = if (optimize == .Debug) .dynamic else .static,
+    });
 
-    const run_cmd = b.addRunArtifact(example_exe);
+    const exe = b.addExecutable(.{
+        .name = "app",
+        .root_module = wrapper_mod,
+    });
+
+    // Depending on the optimize mode either link statically or
+    // provide a path to the dll enabling hot reload during debugging (TODO).
+    if (optimize == .Debug) {
+        const user_install = b.addInstallArtifact(user_lib, .{});
+        const user_install_path = b.pathJoin(&.{
+            b.install_path,
+            "bin",
+            user_install.dest_sub_path,
+        });
+
+        wrapper_mod.addCMacro("USER_DLL", b.fmt("R\"({s})\"", .{user_install_path}));
+        exe.step.dependOn(&user_install.step);
+    } else {
+        wrapper_mod.linkLibrary(user_lib);
+    }
+
+    b.installArtifact(exe);
+
+    const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
     const run_step = b.step("run", "Run the example app");
     run_step.dependOn(&run_cmd.step);
-
-    const cdb = @import("build/cdb.zig");
-    const cdb_step = b.step("cdb", "Create compile_commands.json");
-    cdb_step.dependOn(cdb.addStep(b, .{ .artifacts = &.{ igfx_lib, example_exe } }));
 }

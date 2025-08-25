@@ -5,7 +5,7 @@ namespace igfx::window {
     Window window;
 
     void init() {
-        if (!glfwInit()) log::fatal("failed to initialize glfw");
+        if (!glfwInit()) std::fatal("failed to initialize glfw");
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         const u32 windowWidth = 640; 
@@ -21,7 +21,7 @@ namespace igfx::window {
 
         if (windowPtr == nullptr) {
             glfwTerminate();
-            log::fatal("failed to create a window");
+            std::fatal("failed to create a window");
         }
 
         window = {
@@ -70,7 +70,7 @@ namespace igfx::window {
             window.ptr, 
             nullptr, 
             &surface
-        ) != VK_SUCCESS) log::fatal("failed to create VkSurfaceKHR");
+        ) != VK_SUCCESS) std::fatal("failed to create VkSurfaceKHR");
         return surface;
     }
 }

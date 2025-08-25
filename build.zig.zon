@@ -40,6 +40,14 @@
             .url = "git+https://github.com/scss28/glfw-zig#48937d02d63b5a6feb9b943fac70b4036df0b5fc",
             .hash = "glfw-3.4.0-a4Mg82HGBgB-aHf4SQNcyWyutVoNDAdmhYiY71uVwxoB",
         },
+        .libcx = .{
+            .url = "git+https://github.com/scss28/libcx#4b3023bfbf2903c42b4236cd92f9cf6198186a09",
+            .hash = "libcx-0.0.0-W3ukrQZOAADfX7bjCaI2yoZHNruM56Fx3SEjtYKxQmzw",
+        },
+        .cdb = .{
+            .url = "https://github.com/scss28/cdb.zig/archive/refs/tags/0.14.1.zip",
+            .hash = "cdb-0.0.0-ps5R41waAACzA9juqDGXdi0TFdBmIl55BsYHsZU4Al34",
+        },
     },
     .paths = .{
         "build.zig",

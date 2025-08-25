@@ -2,14 +2,19 @@
 #include "core/window.h"
 #include "igfx/window.h"
 
-#include <array>
+#include <std/alloc.h>
+#include <std/slice.h>
+#include <std/array.h>
+#include <std/mem.h>
+#include <std/arena.h>
+#include <std/math.h>
 
 namespace igfx::graphics {
     Graphics graphics;
 
-    std::array<u8 const*, 1> requiredDeviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    };
+    auto requiredDeviceExtensions = std::arr<u8 const*>(
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    );
 
 #ifdef DEBUG
     VkBool32 vkDebugCallback(
@@ -23,16 +28,19 @@ namespace igfx::graphics {
         void* pUserData
     ) {
     	if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-            log::err("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
+            std::err("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
     	} else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-            log::warn("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
+            std::warn("[vk] {} {} - '{}'", pLayerPrefix, msgCode, pMsg);
     	}
     
     	return VK_FALSE;
     }
 #endif
 
-    VkInstance createVkInstance(u8 const* ppEnabledLayerNames, u32 enableLayerCount) {
+    VkInstance createVkInstance(
+        std::Slice<u8 const*> ppEnabledLayerNames,
+        std::Allocator arena
+    ) {
         u32 glfwExtensionCount;
         u8 const** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     
@@ -40,10 +48,11 @@ namespace igfx::graphics {
 #ifdef DEBUG
         requiredExtensionCount += 1;
 #endif
-        u8 const** requiredExtensions = new u8 const*[requiredExtensionCount];
-        defer { delete[] requiredExtensions; };
-    
-        memcpy(requiredExtensions, glfwExtensions, glfwExtensionCount * sizeof(u8 const*));
+        auto requiredExtensions = arena.alloc<u8 const*>(requiredExtensionCount);
+        std::memcpy(
+            requiredExtensions[0, glfwExtensionCount],
+            std::Slice(glfwExtensions, glfwExtensionCount)
+        );
     
 #ifdef DEBUG
         requiredExtensions[requiredExtensionCount - 1] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
@@ -52,25 +61,23 @@ namespace igfx::graphics {
         u32 vkExtensionCount;
         vkEnumerateInstanceExtensionProperties(nullptr, &vkExtensionCount, nullptr);
     
-        auto vkExtensions = new VkExtensionProperties[vkExtensionCount];
-        defer { delete[] vkExtensions; };
-    
+        auto vkExtensions = arena.alloc<VkExtensionProperties>(vkExtensionCount;
         vkEnumerateInstanceExtensionProperties(
             nullptr, 
             &vkExtensionCount, 
-            vkExtensions
+            vkExtensions.ptr
         );
 
         for (u32 i = 0; i < requiredExtensionCount; i++) {
             u32 j = 0;
             for (; j < vkExtensionCount; j++) {
-                if (strcmp(requiredExtensions[i], vkExtensions[j].extensionName)) break;
+                if (std::eqlZ(requiredExtensions[i], vkExtensions[j].extensionName)) break;
             }
 
             if (j == vkExtensionCount) {
-                log::err("{} (not found)", requiredExtensions[i]);
+                std::err("{} (not found)", requiredExtensions[i]);
             } else {
-                log::debug("{} (enabled)", requiredExtensions[i]);
+                std::debug("{} (enabled)", requiredExtensions[i]);
             }
         }
 
@@ -90,12 +97,12 @@ namespace igfx::graphics {
             .enabledLayerCount = 0,
             .ppEnabledLayerNames = nullptr,
             .enabledExtensionCount = requiredExtensionCount,
-            .ppEnabledExtensionNames = requiredExtensions,
+            .ppEnabledExtensionNames = requiredExtensions.ptr,
         };
 
 #ifdef DEBUG
-        instanceCreateInfo.enabledLayerCount = enableLayerCount;
-        instanceCreateInfo.ppEnabledLayerNames = &ppEnabledLayerNames;
+        instanceCreateInfo.enabledLayerCount = ppEnabledLayerNames.len;
+        instanceCreateInfo.ppEnabledLayerNames = ppEnabledLayerNames.ptr;
 #endif
 
         VkInstance instance;
@@ -105,23 +112,32 @@ namespace igfx::graphics {
             &instance
         );
         if (result != VK_SUCCESS) {
-            log::fatal("failed to create a VkInstance (errno: {})", (i32)result);
+            std::fatal("failed to create a VkInstance (errno: {})", (i32)result);
         }
 
-        log::debug("VkInstance created");
+        std::debug("VkInstance created");
         return instance;
     }
 
-    u32 vkPhysicalDeviceScore(VkPhysicalDevice device) {
+    u32 vkPhysicalDeviceScore(VkPhysicalDevice device, std::Allocator arena) {
         u32 extensionCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
-        VkExtensionProperties* extensions = new VkExtensionProperties[extensionCount];
-        for (u32 i = 0; i < requiredDeviceExtensions.size(); i++) {
-            u32 j = 0;
-            for (; j < extensionCount; j++) {
-                if (strcmp(requiredDeviceExtensions[i], extensions[j].extensionName)) break;
-            }
+        auto extensions = arena.alloc<VkExtensionProperties>(extensionCount);
+        vkEnumerateDeviceExtensionProperties(
+            device, 
+            nullptr, 
+            &extensionCount, 
+            extensions.ptr
+        );
+
+        for (u8 const* required : requiredDeviceExtensions) {
+            u32 j;
+            for (
+                j = 0; 
+                j < extensionCount && !std::eqlZ(required, extensions[j].extensionName); 
+                j++
+            );
 
             if (j == extensionCount) return 0; // extension not found...
         }
@@ -140,36 +156,36 @@ namespace igfx::graphics {
         return score;
     }
 
-    inline VkPhysicalDevice findVkPhysicalDevice(VkInstance instance) {
+    inline VkPhysicalDevice findVkPhysicalDevice(
+        VkInstance instance,
+        std::Allocator arena
+    ) {
         u32 deviceCount;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-        if (deviceCount == 0) log::fatal("failed to find a GPU with vulkan support");
+        if (deviceCount == 0) std::fatal("failed to find a GPU with vulkan support");
 
-        VkPhysicalDevice* devices = new VkPhysicalDevice[deviceCount];
-        defer { delete[] devices; };
-
-        vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+        auto devices = arena.alloc<VkPhysicalDevice>(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.ptr);
 
         VkPhysicalDevice selectedDevice = nullptr;
         u32 selectedDeviceScore = 0;
 
-        for(u32 i = 0; i < deviceCount; i++) {
-            VkPhysicalDevice device = devices[i];
-
-            u32 score = vkPhysicalDeviceScore(device);
+        for(VkPhysicalDevice device : devices) {
+            u32 score = vkPhysicalDeviceScore(device, arena);
             if (score > selectedDeviceScore) {
                 selectedDevice = device;
                 selectedDeviceScore = score;
             }
         }
 
-        if (selectedDevice == nullptr) log::fatal("failed to find a suitable GPU");
+        if (selectedDevice == nullptr) std::fatal("failed to find a suitable GPU");
         return selectedDevice;
     }
 
     inline VkSurfaceFormatKHR findVkSurfaceFormat(
         VkPhysicalDevice physicalDevice,
-        VkSurfaceKHR surface
+        VkSurfaceKHR surface,
+        std::Allocator arena
     ) {
         u32 surfaceFormatCount;
         vkGetPhysicalDeviceSurfaceFormatsKHR(
@@ -178,20 +194,17 @@ namespace igfx::graphics {
                 &surfaceFormatCount, 
                 nullptr
         );
-        if (surfaceFormatCount == 0) log::fatal("no available surface formats");
+        if (surfaceFormatCount == 0) std::fatal("no available surface formats");
 
-        VkSurfaceFormatKHR* surfaceFormats = new VkSurfaceFormatKHR[surfaceFormatCount];
-        defer { delete[] surfaceFormats; };
-
+        auto surfaceFormats = arena.alloc<VkSurfaceFormatKHR>(surfaceFormatCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(
             physicalDevice, 
             surface, 
             &surfaceFormatCount, 
-            surfaceFormats
+            surfaceFormats.ptr
         );
 
-        for (u32 i = 0; i < surfaceFormatCount; i++) {
-            VkSurfaceFormatKHR format = surfaceFormats[0];
+        for (VkSurfaceFormatKHR format : surfaceFormats) {
             if (
                 format.format == VK_FORMAT_B8G8R8A8_SRGB 
                 && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
@@ -205,29 +218,27 @@ namespace igfx::graphics {
 
     inline VkPresentModeKHR findVkPresentMode(
         VkPhysicalDevice physicalDevice,
-        VkSurfaceKHR surface
+        VkSurfaceKHR surface,
+        std::Allocator arena
     ) {
         u32 presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(
-                physicalDevice, 
-                surface, 
-                &presentModeCount, 
-                nullptr
-        );
-        if (presentModeCount == 0) log::fatal("no available present modes");
-        
-        VkPresentModeKHR* presentModes = new VkPresentModeKHR[presentModeCount];
-        defer { delete[] presentModes; };
-
         vkGetPhysicalDeviceSurfacePresentModesKHR(
             physicalDevice, 
             surface, 
             &presentModeCount, 
-            presentModes
+            nullptr
+        );
+        if (presentModeCount == 0) std::fatal("no available present modes");
+        
+        auto presentModes = arena.alloc<VkPresentModeKHR>(presentModeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            physicalDevice, 
+            surface, 
+            &presentModeCount, 
+            presentModes.ptr
         );
 
-        for (u32 i = 0; i < presentModeCount; i++) {
-            VkPresentModeKHR mode = presentModes[i];
+        for (VkPresentModeKHR mode : presentModes) {
             if (mode == VK_PRESENT_MODE_MAILBOX_KHR) return mode;
         }
 
@@ -251,7 +262,8 @@ namespace igfx::graphics {
         VkPhysicalDevice physicalDevice,
         VkSurfaceKHR surface,
         u32* graphicsQueueFamilyIndex,
-        u32* presentQueueFamilyIndex
+        u32* presentQueueFamilyIndex,
+        std::Allocator arena
     ) { 
         u32 queueFamilyCount;
         vkGetPhysicalDeviceQueueFamilyProperties(
@@ -260,21 +272,17 @@ namespace igfx::graphics {
             nullptr
         );
 
-
-        VkQueueFamilyProperties* queueFamilies = 
-            new VkQueueFamilyProperties[queueFamilyCount];
-        defer { delete[] queueFamilies; };
-
+        auto queueFamilies = arena.alloc<VkQueueFamilyProperties>(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(
             physicalDevice, 
             &queueFamilyCount, 
-            queueFamilies
+            queueFamilies.ptr
         );
 
         *graphicsQueueFamilyIndex = 0xffffffff;
         *presentQueueFamilyIndex = 0xffffffff;
 
-        for (u32 i = 0; i < queueFamilyCount; i++) {
+        for (usize i = 0; i < queueFamilies.len; i++) {
             VkQueueFamilyProperties properties = queueFamilies[i];
             if (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 *graphicsQueueFamilyIndex = i;
@@ -294,23 +302,29 @@ namespace igfx::graphics {
         }
 
         if (*graphicsQueueFamilyIndex >= queueFamilyCount) {
-            log::fatal("failed to find graphics family queue");
+            std::fatal("failed to find graphics family queue");
         }
 
         if (*presentQueueFamilyIndex >= queueFamilyCount) {
-            log::fatal("failed to find present family queue");
+            std::fatal("failed to find present family queue");
         }
     }
 
     void init() {
+        std::Arena arena;
+        defer { arena.deinit(); };
+
 #ifdef DEBUG
-        const u8* ppEnabledLayerNames = "VK_LAYER_KHRONOS_validation";
-        u32 enableLayerCount = 1;
+        auto ppEnabledLayerNames = std::arr<u8 const*>(
+            "VK_LAYER_KHRONOS_validation"
+        );
 #else
-        const u8* ppEnabledLayerNames = nullptr;
-        u32 enableLayerCount = 0;
+        std::Array<u8 const*, 0> ppEnabledLayerNames;
 #endif
-        VkInstance instance = createVkInstance(ppEnabledLayerNames, enableLayerCount);
+        VkInstance instance = createVkInstance(
+            ppEnabledLayerNames.buf(), 
+            arena.allocator()
+        );
     
 #ifdef DEBUG
         VkDebugReportCallbackCreateInfoEXT debugCreateInfo {
@@ -332,11 +346,14 @@ namespace igfx::graphics {
             nullptr, 
             &debugCallback
         ) != VK_SUCCESS) {
-            log::warn("failed to create a debug callback");
+            std::warn("failed to create a debug callback");
     	} 
 #endif
 
-        VkPhysicalDevice physicalDevice = findVkPhysicalDevice(instance);
+        VkPhysicalDevice physicalDevice = findVkPhysicalDevice(
+            instance, 
+            arena.allocator()
+        );
         VkSurfaceKHR surface = window::createSurface(instance);
 
         u32 graphicsQueueFamilyIndex, presentQueueFamilyIndex;
@@ -344,34 +361,35 @@ namespace igfx::graphics {
             physicalDevice, 
             surface,
             &graphicsQueueFamilyIndex,
-            &presentQueueFamilyIndex
+            &presentQueueFamilyIndex,
+            arena.allocator()
         );
 
         f32 queuePriority = 1.0f;
-        VkDeviceQueueCreateInfo queueCreateInfos[] {
-            {
+        auto queueCreateInfos = std::arr<VkDeviceQueueCreateInfo>(
+            VkDeviceQueueCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .queueFamilyIndex = graphicsQueueFamilyIndex,
                 .queueCount = 1,
                 .pQueuePriorities = &queuePriority, 
             },
-            {
+            VkDeviceQueueCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .queueFamilyIndex = presentQueueFamilyIndex,
                 .queueCount = 1,
                 .pQueuePriorities = &queuePriority, 
-            },
-        };
+            }
+        );
 
         VkPhysicalDeviceFeatures deviceFeatures {};
         VkDeviceCreateInfo deviceCreateInfo {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .queueCreateInfoCount = 2,
-            .pQueueCreateInfos = queueCreateInfos,
-            .enabledLayerCount = enableLayerCount,
-            .ppEnabledLayerNames = &ppEnabledLayerNames,
-            .enabledExtensionCount = requiredDeviceExtensions.size(),
-            .ppEnabledExtensionNames = requiredDeviceExtensions.data(),
+            .queueCreateInfoCount = queueCreateInfos.len(),
+            .pQueueCreateInfos = queueCreateInfos.data,
+            .enabledLayerCount = ppEnabledLayerNames.len(),
+            .ppEnabledLayerNames = ppEnabledLayerNames.data,
+            .enabledExtensionCount = requiredDeviceExtensions.len(),
+            .ppEnabledExtensionNames = requiredDeviceExtensions.data,
             .pEnabledFeatures = &deviceFeatures,
         };
 
@@ -381,7 +399,7 @@ namespace igfx::graphics {
             &deviceCreateInfo, 
             nullptr, 
             &device
-        ) != VK_SUCCESS) log::fatal("failed to create VkDevice");
+        ) != VK_SUCCESS) std::fatal("failed to create VkDevice");
 
         VkQueue graphicsQueue;
         vkGetDeviceQueue(device, graphicsQueueFamilyIndex, 0, &graphicsQueue);
@@ -389,8 +407,16 @@ namespace igfx::graphics {
         VkQueue presentQueue;
         vkGetDeviceQueue(device, presentQueueFamilyIndex, 0, &presentQueue);
 
-        VkSurfaceFormatKHR surfaceFormat = findVkSurfaceFormat(physicalDevice, surface);
-        VkPresentModeKHR presentMode = findVkPresentMode(physicalDevice, surface);
+        VkSurfaceFormatKHR surfaceFormat = findVkSurfaceFormat(
+            physicalDevice, 
+            surface,
+            arena.allocator()
+        );
+        VkPresentModeKHR presentMode = findVkPresentMode(
+            physicalDevice, 
+            surface, 
+            arena.allocator()
+        );
 
         VkSurfaceCapabilitiesKHR surfaceCapabilities;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
@@ -417,15 +443,15 @@ namespace igfx::graphics {
             .oldSwapchain = nullptr,
         };
 
-        u32 queueFamilyIndices[] = {
+        auto queueFamilyIndices = std::arr<u32>( 
             graphicsQueueFamilyIndex,
-            presentQueueFamilyIndex,
-        };
+            presentQueueFamilyIndex
+        );
 
         if (graphicsQueueFamilyIndex != presentQueueFamilyIndex) {
             swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            swapchainCreateInfo.queueFamilyIndexCount = 2;
-            swapchainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
+            swapchainCreateInfo.queueFamilyIndexCount = queueFamilyIndices.len();
+            swapchainCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data;
         } else {
             swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
@@ -439,22 +465,22 @@ namespace igfx::graphics {
         );
 
         if (swapchainResult != VK_SUCCESS) {
-            log::fatal("failed to create swapchain (errno: {})", (i32)swapchainResult);
+            std::fatal("failed to create swapchain (errno: {})", (i32)swapchainResult);
         }
 
         u32 swapchainImageCount;
         vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, nullptr);
 
-        VkImage* swapchainImages = new VkImage[swapchainImageCount];
-        defer { delete[] swapchainImages; };
+        auto swapchainImages = arena.allocator().alloc<VkImage>(swapchainImageCount);
+
         vkGetSwapchainImagesKHR(
             device, 
             swapchain, 
             &swapchainImageCount, 
-            swapchainImages
+            swapchainImages.ptr
         );
 
-        VkImageView* swapchainImageViews = new VkImageView[swapchainImageCount];
+        auto swapchainImageViews = std::alloc<VkImageView>(swapchainImageCount);
         for (u32 i = 0; i < swapchainImageCount; i++) {
             VkImageViewCreateInfo imageViewCreateInfo {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -481,7 +507,7 @@ namespace igfx::graphics {
                 &imageViewCreateInfo, 
                 nullptr, 
                 &swapchainImageViews[i]
-            ) != VK_SUCCESS) log::fatal("failed to create image view");
+            ) != VK_SUCCESS) std::fatal("failed to create image view");
         }
 
         graphics = {
@@ -494,7 +520,6 @@ namespace igfx::graphics {
             .swapchainImageFormat = surfaceFormat.format,
             .swapchainExtent = swapchainExtent,
             .swapchain = swapchain,
-            .swapchainImageCount = swapchainImageCount,
             .swapchainImageViews = swapchainImageViews,
 #ifdef DEBUG
             .debugCallback = debugCallback,
@@ -517,10 +542,10 @@ namespace igfx::graphics {
         );
 #endif
 
-        for (u32 i = 0; i < graphics.swapchainImageCount; i++) {
-            vkDestroyImageView(graphics.device, graphics.swapchainImageViews[i], nullptr);
+        for (VkImageView view : graphics.swapchainImageViews) {
+            vkDestroyImageView(graphics.device, view, nullptr);
         }
-        delete[] graphics.swapchainImageViews;
+        std::free(graphics.swapchainImageViews);
 
         vkDestroySwapchainKHR(graphics.device, graphics.swapchain, nullptr);
 

@@ -2,8 +2,6 @@
 #include "window.h"
 #include "igfx/graphics.h"
 
-#include <print>
-
 #if _WIN32
 #include <windows.h>
 using DLLHandle = HMODULE;
@@ -37,8 +35,7 @@ struct {
 
         handle = LOAD_DLL(USER_DLL);
         if (handle == nullptr) {
-            std::println(stderr, "error: failed to load dynamic library '{}'", USER_DLL);
-            exit(1);
+            std::fatal("error: failed to load dynamic library '{}'", USER_DLL);
         }
 
         fns.init = loadFn<InitFn>("init");
@@ -50,8 +47,7 @@ struct {
     Fn loadFn(const u8 name[]) {
         Fn fn = (Fn)GET_SYM(handle, name);
         if (fn == nullptr) {
-            std::println(stderr, "error: failed to load function '{}'", name);
-            exit(1);
+            std::fatal("error: failed to load function '{}'", name);
         }
 
         return fn; 

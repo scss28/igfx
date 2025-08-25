@@ -1,5 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include <std/slice.h>
 
 namespace igfx::graphics {
     struct Graphics {
@@ -12,8 +13,7 @@ namespace igfx::graphics {
         VkFormat swapchainImageFormat;
         VkExtent2D swapchainExtent;
         VkSwapchainKHR swapchain;
-        u32 swapchainImageCount;
-        VkImageView* swapchainImageViews;
+        std::Buf<VkImageView> swapchainImageViews;
 
 #ifdef DEBUG
         VkDebugReportCallbackEXT debugCallback;

@@ -1,7 +1,5 @@
 #pragma once
-
-#include "igfx/nums.h"
-#include <cmath>
+#include <std/nums.h>
 
 namespace igfx {
     struct vec2 {
@@ -11,9 +9,9 @@ namespace igfx {
         static const vec2 zero;
         static const vec2 one;
 
-        inline vec2 lerp(vec2 a, vec2 b, f32 t) {
-            return {std::fmaf(b.x - a.x, t, a.x), std::fmaf(b.y - a.y, t, a.y)};
-        }
+        // inline vec2 lerp(vec2 a, vec2 b, f32 t) {
+        //     return {std::fmaf(b.x - a.x, t, a.x), std::fmaf(b.y - a.y, t, a.y)};
+        // }
         
         inline vec2 operator+(vec2 rhs) const {
             return {this->x + rhs.x, this->y + rhs.y};
